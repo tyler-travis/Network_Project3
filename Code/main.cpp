@@ -11,9 +11,10 @@
 frameio net;             // gives us access to the raw network
 message_queue ip_queue;  // message queue for the IP protocol stack
 message_queue arp_queue; // message queue for the ARP protocol stack
+message_queue icmp_queue;// message queue for the ICMP protocol stack
 //message_queue frame_queue; // message queue for the ping!
 arp_cache cache;
-IP myIP("192.168.1.10");
+IP myIP("192.168.1.20");
 const octet *mac;
 octet frame_to_send[1500];
 
@@ -70,6 +71,21 @@ struct ip_header
   octet TIPA[4];          // offset 16 - The target IP Address
 };
 
+struct ip_frame
+{
+  octet V_IHL;            // offset 0 - 4 bits version, 4 bits IP Header Length
+  octet DiffServ;         // offset 1 - probably 0
+  octet TL[2];            // offset 2 - Total length
+  octet ID[2];            // offset 4 - Everything in the same packet has the same ID
+  octet Flags_FragOff[2]; // offset 6 - Flags are first 3 bits, fragment offset is the remaining
+  octet TTL;              // offset 8 - Time to live
+  octet Protocol;         // offset 9 - The protocol
+  octet Checksum[2];      // offset 10 - The checksum
+  octet SIPA[4];          // offset 12 - The source IP Address
+  octet TIPA[4];          // offset 16 - The target IP Address
+  octet data[1500];       // offset 20 - data stuff
+};
+
 //
 // This thread sits around and receives frames from the network.
 // When it gets one, it dispatches it to the proper protocol stack.
@@ -99,14 +115,24 @@ void *protocol_loop(void *arg)
 //
 void *ip_protocol_loop(void *arg)
 {
-   octet buf[1500];
+   ip_frame buf;
    event_kind event;
-   //int timer_no = 1;
+   int timer_no = 1;
 
    // for fun, fire a timer each time we get a frame
    while ( 1 )
    {
-      ip_queue.recv(&event, buf, sizeof(buf));
+      ip_queue.recv(&event, &buf, sizeof(buf));
+      
+      if (event != TIMER && buf.Protocol == 0x1)
+      {
+        icmp_queue.send(PACKET, buf.data, sizeof(icmp_frame));
+        continue;
+      }
+      
+      
+      
+      
       /*if ( event != TIMER )
       {
          printf("got an IP frame from %d.%d.%d.%d, queued timer %d\n",
