@@ -21,7 +21,7 @@
 // and TIMER are defined. Feel free to add more. The other three bytes
 // of header are message length.
 //
-typedef enum { PACKET, TIMER } event_kind;
+typedef enum { PACKET, ICMP, TIMER } event_kind;
 
 class message_queue
 {

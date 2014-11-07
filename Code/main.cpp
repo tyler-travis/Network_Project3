@@ -15,13 +15,12 @@ frameio net;             // gives us access to the raw network
 message_queue ip_queue;  // message queue for the IP protocol stack
 message_queue arp_queue; // message queue for the ARP protocol stack
 message_queue icmp_queue;// message queue for the ICMP protocol stack
-//message_queue frame_queue; // message queue for the ping!
+message_queue frame_queue; // message queue for sending IP frames
 arp_cache cache;
 IP gateway("192.168.1.1");
-IP myIP("192.168.1.30");
+IP myIP("192.168.1.40");
 const octet *mac;
 
-void create_ICMP(octet*, IP, IP);
 
 struct ether_frame       // handy template for 802.3/DIX frames
 {
@@ -86,8 +85,10 @@ struct ip_frame
   octet Checksum[2];      // offset 10 - The checksum
   octet SIPA[4];          // offset 12 - The source IP Address
   octet TIPA[4];          // offset 16 - The target IP Address
-  octet data[1500];       // offset 20 - data stuff
+  octet Data[1500];       // offset 20 - data stuff
 };
+
+ip_frame create_IP(icmp_frame*, IP, IP);
 
 //
 // This thread sits around and receives frames from the network.
@@ -139,7 +140,7 @@ void *ip_protocol_loop(void *arg)
 
       if (event != TIMER && buf.Protocol == 0x1)
       {
-        icmp_queue.send(PACKET, buf.data, sizeof(icmp_frame));
+        icmp_queue.send(PACKET, buf.Data, sizeof(icmp_frame));
         continue;
       }
       
@@ -165,16 +166,83 @@ void *icmp_protocol_loop(void *arg)
 {
   icmp_frame buf;
   event_kind event;
+  unsigned int seq_num = 0;
+  const int id_num = 1234;
 
   while (1)
   {
     icmp_queue.recv(&event, &buf, sizeof(icmp_frame));
-    if(event == PACKET)
+    if(event == PACKET || event == ICMP)
     {
       printf("Recieved ICMP Packet!\n");
+      if(buf.Type == 0)
+      {
+        // Echo Reply
+      }
+      else if(buf.Type == 8)
+      {
+        // Echo Request
+        
+        // Set id
+        buf.Header_Data[0] = 0xff & (id_num >> 8);
+        buf.Header_Data[1] = 0xff & id_num;
+
+        // Set seq
+        buf.Header_Data[2] = 0xff & (seq_num >> 8);
+        buf.Header_Data[3] = 0xff & seq_num;
+
+        // Set Checksum
+        int check = chksum((octet *)(&buf), 8, 0);
+        buf.Checksum[0] = 0xff & (check >> 8);
+        buf.Checksum[1] = 0xff & check;
+
+        IP TIP;
+        memcpy(TIP.getbuf(), buf.Data, 4);
+
+        ip_frame ipFrame = create_IP(&buf, myIP, TIP);
+
+        seq_num++;
+
+        // TODO:
+        // Send ip_frame out on the network
+      }
     }
 
   }
+}
+
+ip_frame create_IP(icmp_frame* icmpFrame, IP sIP, IP tIP)
+{
+  ip_frame ret;
+
+  ret.V_IHL = 0x45;
+
+  ret.DiffServ = 0;         // offset 1 - probably 0
+
+  ret.TL[0] = 0;            // offset 2 - Total length
+  ret.TL[1] = 0x54;            // offset 2 - Total length
+
+  ret.ID[0];            // offset 4 - Everything in the same packet has the same ID
+  ret.ID[1];            // offset 4 - Everything in the same packet has the same ID
+
+  ret.Flags_FragOff[0] = 0x40; // offset 6 - Flags are first 3 bits, fragment offset is the remaining
+  ret.Flags_FragOff[1] = 0; // offset 6 - Flags are first 3 bits, fragment offset is the remaining
+
+  ret.TTL = 64;              // offset 8 - Time to live
+
+  ret.Protocol = 1;         // offset 9 - The protocol
+
+  memcpy(ret.SIPA, sIP.getbuf(), sizeof(4));
+  memcpy(ret.TIPA, tIP.getbuf(), sizeof(4));
+
+  ret.Checksum[0] = 0;
+  ret.Checksum[1] = 0;
+
+  int check = chksum((octet *)(&ret), 8, 0);
+  ret.Checksum[0] = 0xff & (check >> 8);
+  ret.Checksum[1] = 0xff & check;
+
+  return ret;
 }
 
 //
@@ -278,6 +346,16 @@ void *arp_protocol_loop(void *arg)
         // Add ip/mac to icmp message queue
         // 
 
+        event_kind event1;
+        icmp_frame icmp;
+        
+        frame_queue.recv(&event1, &icmp, sizeof(icmp_frame));
+        icmp_queue.send(event1, &icmp, sizeof(icmp_frame));
+
+        //memcpy(ipFrame.Data, &icmp, sizeof(icmp_frame));
+
+        //create_IP(&ipFrame, myIP, SPA);
+
         arp_queue.timer(200, (int)((int*)SHA.getbuf())[0]);
       }
 
@@ -286,15 +364,10 @@ void *arp_protocol_loop(void *arg)
         printf("Removing last item\n");
         cache.remove();
       }
-
    }
    return 0;
 }
 
-void create_ICMP(octet * buf, IP sIP, IP tIP)
-{
-  
-}
 
 void *ping(void *args)
 {
@@ -307,7 +380,18 @@ void *ping(void *args)
     // TODO:
     // Add ip/mac to icmp message queue
     //
+    icmp_frame icmp;
+    icmp.Type = 8;  // Echo Request
+    icmp.Code = 0;
+    icmp.Checksum[0] = 0;
+    icmp.Checksum[1] = 0;
+    icmp.Header_Data[0] = 0;
+    icmp.Header_Data[1] = 0;
+    icmp.Header_Data[2] = 0;
+    icmp.Header_Data[3] = 0;
+
     
+    icmp_queue.send(ICMP, &icmp, sizeof(icmp_frame));
 
   }
   else
@@ -357,6 +441,20 @@ void *ping(void *args)
 
     //TODO:
     //QUEUE FRAME AND THEN IN THE RECEIVE REPLY SECTION, SEND ALL QUEUED FRAMES WITH THE MAC ADDRESS
+
+    icmp_frame icmp;
+    icmp.Type = 8;  // Echo Request
+    icmp.Code = 0;
+    icmp.Checksum[0] = 0;
+    icmp.Checksum[1] = 0;
+    icmp.Header_Data[0] = 0;
+    icmp.Header_Data[1] = 0;
+    icmp.Header_Data[2] = 0;
+    icmp.Header_Data[3] = 0;
+
+    memcpy(icmp.Data, ip.getbuf(), sizeof(6));    // Only way to get TIP up the stack... we think....
+
+    frame_queue.send(ICMP,&icmp,sizeof(icmp_frame));
   }
 
   return 0;
