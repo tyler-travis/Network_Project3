@@ -19,7 +19,7 @@ class arp_cache
     bool insert_IP_MAC(IP, MAC);
     void remove_IP_MAC(IP);
     cache_type::iterator find_IP(IP);
-    bool find_IP_(IP);
+    bool find_IP_b(IP);
     bool find_MAC(MAC);
     MAC get_MAC(IP);
     void remove();

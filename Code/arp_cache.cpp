@@ -47,7 +47,7 @@ bool arp_cache::find_MAC(MAC _mac)
   return false;
 }
 
-bool arp_cache::find_IP_(IP _ip)
+bool arp_cache::find_IP_b(IP _ip)
 {
   cache_type::iterator itr;
   for(itr = cache.begin(); itr != cache.end(); ++itr)

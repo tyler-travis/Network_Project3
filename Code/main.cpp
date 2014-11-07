@@ -88,7 +88,7 @@ struct ip_frame
   octet Data[1500];       // offset 20 - data stuff
 };
 
-ip_frame create_IP(icmp_frame*, IP, IP);
+ip_frame create_IP(IP, IP); // We don't use the ICMP frame in this function
 
 //
 // This thread sits around and receives frames from the network.
@@ -196,9 +196,11 @@ void *icmp_protocol_loop(void *arg)
         buf.Checksum[0] = 0xff & (check >> 8);
         buf.Checksum[1] = 0xff & check;
 
+        // Recieve the IP address from the data field of the ICMP packet
         IP TIP;
         memcpy(TIP.getbuf(), buf.Data, 4);
 
+        // Create the IP header
         ip_frame ipFrame = create_IP(&buf, myIP, TIP);
 
         seq_num++;
@@ -211,8 +213,10 @@ void *icmp_protocol_loop(void *arg)
   }
 }
 
-ip_frame create_IP(icmp_frame* icmpFrame, IP sIP, IP tIP)
+// Create the ip_frame to send up the layers
+ip_frame create_IP(IP sIP, IP tIP) // We didn't use the ICMP frame variable in this function
 {
+  // The return holder
   ip_frame ret;
 
   ret.V_IHL = 0x45;
@@ -223,10 +227,10 @@ ip_frame create_IP(icmp_frame* icmpFrame, IP sIP, IP tIP)
   ret.TL[1] = 0x54;            // offset 2 - Total length
 
   ret.ID[0];            // offset 4 - Everything in the same packet has the same ID
-  ret.ID[1];            // offset 4 - Everything in the same packet has the same ID
+  ret.ID[1];            
 
   ret.Flags_FragOff[0] = 0x40; // offset 6 - Flags are first 3 bits, fragment offset is the remaining
-  ret.Flags_FragOff[1] = 0; // offset 6 - Flags are first 3 bits, fragment offset is the remaining
+  ret.Flags_FragOff[1] = 0; 
 
   ret.TTL = 64;              // offset 8 - Time to live
 
@@ -238,6 +242,7 @@ ip_frame create_IP(icmp_frame* icmpFrame, IP sIP, IP tIP)
   ret.Checksum[0] = 0;
   ret.Checksum[1] = 0;
 
+  // Calculate the checksum
   int check = chksum((octet *)(&ret), 8, 0);
   ret.Checksum[0] = 0xff & (check >> 8);
   ret.Checksum[1] = 0xff & check;
@@ -266,6 +271,7 @@ void *arp_protocol_loop(void *arg)
 
         printf("\nARP event!\nRequest received\n");
 
+        // Construct the ARP reply
         frame.HTYPE[0] = 0;
         frame.HTYPE[1] = 1; // HTYPE - Ethernet
 
@@ -291,22 +297,24 @@ void *arp_protocol_loop(void *arg)
         // TPA - Their IP Address
         memcpy(frame.TPA, buf+14, sizeof(frame.TPA));
 
+        // Make the ether_header
         memcpy(header.dst_mac, frame.THA, sizeof(frame.THA));
         memcpy(header.src_mac, frame.SHA, sizeof(frame.SHA));
         header.prot[0] = 8;
         header.prot[1] = 6;
 
+        // Make send buffer to combine all the elements together
         octet send_buf[sizeof(arp_frame) + sizeof(ether_header)];
 
         memcpy(send_buf, &header, sizeof(ether_header));
         memcpy(send_buf + sizeof(ether_header), &frame, sizeof(arp_frame));
 
-        for(unsigned int i = 0; i < sizeof(send_buf); i+=8)
+        /*for(unsigned int i = 0; i < sizeof(send_buf); i+=8)
         {
           printf("%02X %02X %02X %02X %02X %02X %02X %02X\n", send_buf[i],send_buf[i+1],
               send_buf[i+2],send_buf[i+3],send_buf[i+4],send_buf[i+5],send_buf[i+6],send_buf[i+7]);
         }
-        printf("\n");
+        printf("\n");*/
 
         printf("Sending Reply\n");
         
@@ -319,12 +327,16 @@ void *arp_protocol_loop(void *arg)
 
         printf("\nARP event!\nReceived Reply\n\n");
 
+        // Pull out the sender MAC and IP address
         MAC SHA(buf[8], buf[9], buf[10], buf[11], buf[12], buf[13]);
         IP SPA(buf[14],buf[15],buf[16],buf[17]);
+
         printf("Recieved MAC: ");
         SHA.print_x();
         printf("Recieved IP: ");
         SPA.print_d();
+
+        // Put the MAC and IP Address into the ARP Cache
         if(!cache.find_IP_(SPA))
         {
           printf("Not in cache\n");
@@ -334,7 +346,7 @@ void *arp_protocol_loop(void *arg)
             printf("Inserted IP+MAC in cache\n");
           }
         }
-        if(cache.find_IP_(SPA))
+        if(cache.find_IP_b(SPA)) // Added the _b to defierentiate between the two 
         {
           printf("\tIP+MAC is in cache\n");
         }
@@ -349,6 +361,7 @@ void *arp_protocol_loop(void *arg)
         event_kind event1;
         icmp_frame icmp;
         
+        // Pull off the frame to send and send it to the next layer
         frame_queue.recv(&event1, &icmp, sizeof(icmp_frame));
         icmp_queue.send(event1, &icmp, sizeof(icmp_frame));
 
@@ -356,11 +369,13 @@ void *arp_protocol_loop(void *arg)
 
         //create_IP(&ipFrame, myIP, SPA);
 
+        // Put a timer in the ARP queue to know when to remove an element from the ARP cache
         arp_queue.timer(200, (int)((int*)SHA.getbuf())[0]);
       }
 
       if(event == TIMER)
       {
+        // Remove the last element in the queue
         printf("Removing last item\n");
         cache.remove();
       }
@@ -371,6 +386,7 @@ void *arp_protocol_loop(void *arg)
 
 void *ping(void *args)
 {
+  // Get the IP address from the argument
   IP ip = *(static_cast<IP*>(args));
   octet packet[1500];
   if(cache.find_IP_(ip))
@@ -380,6 +396,8 @@ void *ping(void *args)
     // TODO:
     // Add ip/mac to icmp message queue
     //
+
+    // Compose ICMP Frame to send up the layers
     icmp_frame icmp;
     icmp.Type = 8;  // Echo Request
     icmp.Code = 0;
@@ -391,6 +409,7 @@ void *ping(void *args)
     icmp.Header_Data[3] = 0;
 
     
+    // Send the ICMP frame up to the reply layer
     icmp_queue.send(ICMP, &icmp, sizeof(icmp_frame));
 
   }
