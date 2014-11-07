@@ -20,7 +20,6 @@ arp_cache cache;
 IP gateway("192.168.1.1");
 IP myIP("192.168.1.30");
 const octet *mac;
-octet frame_to_send[1500];
 
 void create_ICMP(octet*, IP, IP);
 
@@ -133,6 +132,11 @@ void *ip_protocol_loop(void *arg)
       temp.Checksum[1] = 0;
       int check = chksum((octet *)(&temp), 20, 0);
       
+      if (check != (buf.Checksum[0]<<8 | buf.Checksum[1]))
+      {
+        continue;
+      }
+
       if (event != TIMER && buf.Protocol == 0x1)
       {
         icmp_queue.send(PACKET, buf.data, sizeof(icmp_frame));
@@ -353,8 +357,6 @@ void *ping(void *args)
 
     //TODO:
     //QUEUE FRAME AND THEN IN THE RECEIVE REPLY SECTION, SEND ALL QUEUED FRAMES WITH THE MAC ADDRESS
-    
-    memcpy(frame_to_send,packet,sizeof(frame_to_send)); 
   }
 
   return 0;

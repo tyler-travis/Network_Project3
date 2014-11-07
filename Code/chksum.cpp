@@ -41,5 +41,5 @@ int chksum(octet *s, int bytes, int initial)
    // wrap carries back into sum
    //
    while ( sum > 0xffff ) sum = (sum & 0xffff) + (sum >> 16);
-   return ~sum;
+   return 0xffff & ~sum;
 }
