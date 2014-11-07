@@ -18,7 +18,7 @@ message_queue icmp_queue;// message queue for the ICMP protocol stack
 //message_queue frame_queue; // message queue for the ping!
 arp_cache cache;
 IP gateway("192.168.1.1");
-IP myIP("192.168.1.40");
+IP myIP("192.168.1.30");
 const octet *mac;
 octet frame_to_send[1500];
 
@@ -128,7 +128,10 @@ void *ip_protocol_loop(void *arg)
    {
       ip_queue.recv(&event, &buf, sizeof(buf));
       
-      int check = chksum((octet *)(&buf), 10, 0);
+      ip_frame temp = buf;
+      temp.Checksum[0] = 0;
+      temp.Checksum[1] = 0;
+      int check = chksum((octet *)(&temp), 20, 0);
       
       if (event != TIMER && buf.Protocol == 0x1)
       {
