@@ -17,6 +17,7 @@ message_queue icmp_queue;// message queue for the ICMP protocol stack
 //message_queue frame_queue; // message queue for the ping!
 arp_cache cache;
 IP myIP("192.168.1.20");
+IP gateway("192.168.1.1");
 const octet *mac;
 octet frame_to_send[1500];
 
@@ -52,10 +53,10 @@ struct arp_frame
 
 struct icmp_frame
 {
-  octet ToM;            // offset 0
-  octet Code;           // offset 1
+  octet Type;           // offset 0 - Echo Request = 8; Echo Reply = 0
+  octet Code;           // offset 1 - Echo Request = 0; Echo Reply = 0
   octet Checksum[2];    // offset 2
-  octet Header_Data[4]; // offset 4
+  octet Header_Data[4]; // offset 4 - Data
   octet Data[48];       // offset 8
 };
 
