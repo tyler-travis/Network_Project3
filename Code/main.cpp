@@ -5,6 +5,7 @@
 #include "IP.h"
 #include "MAC.h"
 #include "arp_cache.h"
+#include "chksum.cpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,8 +17,8 @@ message_queue arp_queue; // message queue for the ARP protocol stack
 message_queue icmp_queue;// message queue for the ICMP protocol stack
 //message_queue frame_queue; // message queue for the ping!
 arp_cache cache;
-IP myIP("192.168.1.20");
 IP gateway("192.168.1.1");
+IP myIP("192.168.1.50");
 const octet *mac;
 octet frame_to_send[1500];
 
@@ -127,6 +128,8 @@ void *ip_protocol_loop(void *arg)
    {
       ip_queue.recv(&event, &buf, sizeof(buf));
       
+      int check = chksum((octet *)(&buf), 10, 0);
+      
       if (event != TIMER && buf.Protocol == 0x1)
       {
         icmp_queue.send(PACKET, buf.data, sizeof(icmp_frame));
@@ -149,6 +152,19 @@ void *ip_protocol_loop(void *arg)
       }*/
    }
    return 0;
+}
+
+void *icmp_protocol_loop(void *arg)
+{
+  icmp_frame buf;
+  event_kind event;
+
+  while (1)
+  {
+    icmp_queue.recv(&event, &buf, sizeof(icmp_frame));
+
+
+  }
 }
 
 //
@@ -341,7 +357,7 @@ void *ping(void *args)
 //
 // if you're going to have pthreads, you'll need some thread descriptors
 //
-pthread_t loop_thread, arp_thread, ip_thread, ping_thread;
+pthread_t loop_thread, arp_thread, ip_thread, ping_thread, icmp_thread;
 
 //
 // start all the threads then step back and watch (actually, the timer
@@ -356,6 +372,7 @@ int main(int argc, char** argv)
   pthread_create(&loop_thread,NULL,protocol_loop,NULL);
   pthread_create(&arp_thread,NULL,arp_protocol_loop,NULL);
   pthread_create(&ip_thread,NULL,ip_protocol_loop,NULL);
+  pthread_create(&icmp_thread,NULL,icmp_protocol_loop,NULL);
 
   for ( ; ; )
   {
