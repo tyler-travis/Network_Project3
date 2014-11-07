@@ -18,7 +18,7 @@ message_queue icmp_queue;// message queue for the ICMP protocol stack
 //message_queue frame_queue; // message queue for the ping!
 arp_cache cache;
 IP gateway("192.168.1.1");
-IP myIP("192.168.1.50");
+IP myIP("192.168.1.40");
 const octet *mac;
 octet frame_to_send[1500];
 
@@ -162,7 +162,10 @@ void *icmp_protocol_loop(void *arg)
   while (1)
   {
     icmp_queue.recv(&event, &buf, sizeof(icmp_frame));
-
+    if(event == PACKET)
+    {
+      printf("Recieved ICMP Packet!\n");
+    }
 
   }
 }
