@@ -1,7 +1,7 @@
 CC = g++
 CFLAGS = -Wall -c -std=c++11 -g
 LDFLAGS = -lpthread
-SOURCES = main.cpp frameio.cpp util.cpp IP.cpp arp_cache.cpp MAC.cpp chksum.cpp
+SOURCES = main.cpp frameio.cpp util.cpp IP.cpp arp_cache.cpp MAC.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 EXECUTABLE = exec
 
