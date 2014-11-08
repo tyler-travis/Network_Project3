@@ -192,7 +192,7 @@ void *icmp_protocol_loop(void *arg)
         buf.Header_Data[3] = 0xff & seq_num;
 
         // Set Checksum
-        int check = chksum((octet *)(&buf), 8, 0);
+        int check = chksum((octet *)(&buf), sizeof(icmp_frame), 0);
         buf.Checksum[0] = 0xff & (check >> 8);
         buf.Checksum[1] = 0xff & check;
 
