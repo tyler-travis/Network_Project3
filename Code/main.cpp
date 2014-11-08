@@ -18,7 +18,7 @@ message_queue icmp_queue;// message queue for the ICMP protocol stack
 message_queue frame_queue; // message queue for sending IP frames
 arp_cache cache;
 IP gateway("192.168.1.1");
-IP myIP("192.168.1.40");
+IP myIP("192.168.1.20");
 const octet *mac;
 
 
@@ -205,8 +205,9 @@ void *icmp_protocol_loop(void *arg)
 
         seq_num++;
 
-        // TODO:
-        // Send ip_frame out on the network
+        ether_header etherHeader;
+        memcpy(etherHeader.src_mac, mac, sizeof(etherHeader.src_mac));
+        memcpy(etherHeader.dst_mac, cache.get_MAC(TIP).getbuf(), sizeof(etherHeader.dst_mac));
       }
     }
 
