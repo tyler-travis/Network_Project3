@@ -85,7 +85,7 @@ struct ip_frame
   octet Checksum[2];      // offset 10 - The checksum
   octet SIPA[4];          // offset 12 - The source IP Address
   octet TIPA[4];          // offset 16 - The target IP Address
-  octet Data[1500];       // offset 20 - data stuff
+  octet Data[1000];       // offset 20 - data stuff
 };
 
 ip_frame create_IP(IP, IP); // We don't use the ICMP frame in this function
@@ -205,11 +205,26 @@ void *icmp_protocol_loop(void *arg)
 
         seq_num++;
 
+        // Combine IP header with ICMP frame
+        memcpy(ipFrame.Data, &buf, sizeof(icmp_frame));
+
+        // Create and attach ether header
         ether_header etherHeader;
         memcpy(etherHeader.src_mac, mac, sizeof(etherHeader.src_mac));
         memcpy(etherHeader.dst_mac, cache.get_MAC(TIP).getbuf(), sizeof(etherHeader.dst_mac));
+        
+        printf("Debug: etherHeader.src_mac = %hhx.%hhx.%hhx.%hhx.%hhx.%hhx", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+        printf("\nDebug: etherHeader.dst_mac = %hhx.%hhx.%hhx.%hhx.%hhx.%hhx\n", etherHeader.dst_mac[0], etherHeader.dst_mac[1], etherHeader.dst_mac[2], etherHeader.dst_mac[3], etherHeader.dst_mac[4], etherHeader.dst_mac[5]);
+
         etherHeader.prot[0] = 0x08;
         etherHeader.prot[1] = 0x00;
+
+        octet send_buf[sizeof(etherHeader)+sizeof(ip_frame)];
+        memcpy(send_buf, &etherHeader, sizeof(ether_header));
+        memcpy(send_buf+sizeof(ether_header), &ipFrame, sizeof(ip_frame));
+
+        net.send_frame(send_buf, sizeof(send_buf)-4);
       }
     }
 
@@ -246,9 +261,10 @@ ip_frame create_IP(IP sIP, IP tIP) // We didn't use the ICMP frame variable in t
   ret.Checksum[1] = 0;
 
   // Calculate the checksum
-  int check = chksum((octet *)(&ret), 8, 0);
+  int check = chksum((octet *)(&ret), 20, 0);
   ret.Checksum[0] = 0xff & (check >> 8);
   ret.Checksum[1] = 0xff & check;
+  printf("Debug: Checksum: %d\n", check);
 
   return ret;
 }
@@ -413,6 +429,7 @@ void *ping(void *args)
 
     
     // Send the ICMP frame up to the reply layer
+    memcpy(icmp.Data, ip.getbuf(), sizeof(6));    // Only way to get TIP up the stack... we think....
     icmp_queue.send(ICMP, &icmp, sizeof(icmp_frame));
 
   }
