@@ -32,7 +32,12 @@ cache_type::iterator arp_cache::find_IP(IP _ip)
 
 MAC arp_cache::get_MAC(IP _ip)
 {
-  return find_IP(_ip)->second;
+  cache_type::iterator itr = find_IP(_ip);
+  if(itr == cache_type::iterator(0))
+  {
+    return MAC("00:00:00:00:00");
+  }
+  return itr->second;
 }
 
 bool arp_cache::find_MAC(MAC _mac)

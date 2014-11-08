@@ -227,8 +227,8 @@ ip_frame create_IP(IP sIP, IP tIP) // We didn't use the ICMP frame variable in t
   ret.TL[0] = 0;            // offset 2 - Total length
   ret.TL[1] = 0x54;            // offset 2 - Total length
 
-  ret.ID[0];            // offset 4 - Everything in the same packet has the same ID
-  ret.ID[1];            
+  ret.ID[0] = 0x12;            // offset 4 - Everything in the same packet has the same ID
+  ret.ID[1] = 0x34;            
 
   ret.Flags_FragOff[0] = 0x40; // offset 6 - Flags are first 3 bits, fragment offset is the remaining
   ret.Flags_FragOff[1] = 0; 
