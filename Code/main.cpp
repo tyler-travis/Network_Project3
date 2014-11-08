@@ -188,6 +188,7 @@ void *icmp_protocol_loop(void *arg)
         // Recieve Request
         // Send Echo Reply
         
+        printf("Received Request\n");
         icmp_frame temp = buf;
         temp.Checksum[0] = 0;
         temp.Checksum[1] = 0;
@@ -212,13 +213,15 @@ void *icmp_protocol_loop(void *arg)
         memcpy(icmpFrame.Data, buf.Data, sizeof(icmpFrame.Data));
 
         // Set Checksum
-        check = chksum((octet *)(&icmpFrame), sizeof(icmp_frame), 0);
-        icmpFrame.Checksum[0] = 0xff & (check >> 8);
-        icmpFrame.Checksum[1] = 0xff & check;
+        int check1 = chksum((octet *)(&icmpFrame), sizeof(icmp_frame), 0);
+        icmpFrame.Checksum[0] = 0xff & (check1 >> 8);
+        icmpFrame.Checksum[1] = 0xff & check1;
 
         IP TIP(ipFrame_recv.SIPA[0], ipFrame_recv.SIPA[1], ipFrame_recv.SIPA[2], ipFrame_recv.SIPA[3]);
 
         ip_frame ipFrame = create_IP(myIP, TIP); 
+
+        memcpy(ipFrame.Data, &icmpFrame, sizeof(icmp_frame));
 
         ether_header etherHeader;
         memcpy(etherHeader.src_mac, mac, sizeof(etherHeader.src_mac));
@@ -252,8 +255,9 @@ void *icmp_protocol_loop(void *arg)
         buf.Checksum[0] = 0xff & (check >> 8);
         buf.Checksum[1] = 0xff & check;
 
-        // Recieve the IP address from the data field of the ICMP packet
-        IP TIP(ipFrame_recv.SIPA[0], ipFrame_recv.SIPA[1], ipFrame_recv.SIPA[2], ipFrame_recv.SIPA[3]);
+        // Recieve the IP address from the data field of the IP packet
+        IP TIP(ipFrame_recv.TIPA[0], ipFrame_recv.TIPA[1], ipFrame_recv.TIPA[2], ipFrame_recv.TIPA[3]);
+        TIP.print_d();
 
         // Create the IP header
         ip_frame ipFrame = create_IP(myIP, TIP);
@@ -265,13 +269,21 @@ void *icmp_protocol_loop(void *arg)
 
         // Create and attach ether header
         ether_header etherHeader;
-        memcpy(etherHeader.src_mac, mac, sizeof(etherHeader.src_mac));
-        memcpy(etherHeader.dst_mac, cache.get_MAC(TIP).getbuf(), sizeof(etherHeader.dst_mac));
         
-        printf("Debug: etherHeader.src_mac = %hhx.%hhx.%hhx.%hhx.%hhx.%hhx", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-        printf("\nDebug: etherHeader.dst_mac = %hhx.%hhx.%hhx.%hhx.%hhx.%hhx\n", etherHeader.dst_mac[0], etherHeader.dst_mac[1], etherHeader.dst_mac[2], etherHeader.dst_mac[3], etherHeader.dst_mac[4], etherHeader.dst_mac[5]);
-
+        octet * ipcmp;
+        octet * gwaycmp;
+        ipcmp = (octet *)TIP.getbuf();
+        gwaycmp = (octet *)gateway.getbuf();
+        if ((ipcmp[0] == gwaycmp[0]) && (ipcmp[1] == gwaycmp[1]) && (ipcmp[2] == gwaycmp[2]))
+        {
+          memcpy(etherHeader.dst_mac, cache.get_MAC(TIP).getbuf(), sizeof(etherHeader.dst_mac));
+        }
+        else
+        {
+          memcpy(etherHeader.dst_mac, cache.get_MAC(gateway).getbuf(), sizeof(etherHeader.dst_mac));
+        }
+        memcpy(etherHeader.src_mac, mac, sizeof(etherHeader.src_mac));
+        
         etherHeader.prot[0] = 0x08;
         etherHeader.prot[1] = 0x00;
 
@@ -539,7 +551,20 @@ void *ping(void *args)
     octet temp[] = {0,0,0,0,0,0};
     memcpy(frame.THA,temp,sizeof(temp));
 
-    memcpy(frame.TPA,ip.getbuf(),sizeof(frame.TPA));
+    octet * ipcmp;
+    ipcmp = (octet*)ip.getbuf();
+    octet * gwaycmp;
+    gwaycmp = (octet*)gateway.getbuf();
+    if (ipcmp[0] == gwaycmp[0] && ipcmp[1] == gwaycmp[1] && ipcmp[2] == gwaycmp[2])
+    {
+      // internal network
+      memcpy(frame.TPA,ip.getbuf(),sizeof(frame.TPA));
+    }
+    else
+    {
+      // external network
+      memcpy(frame.TPA,gateway.getbuf(),sizeof(frame.TPA));
+    }
 
     for(int i = 0; i < 6; ++i) temp[i] = 0xff;
 
@@ -572,7 +597,11 @@ void *ping(void *args)
 
     memcpy(icmp.Data, ip.getbuf(), sizeof(6));    // Only way to get TIP up the stack... we think....
 
-    frame_queue.send(ICMP,&icmp,sizeof(icmp_frame));
+    ip_frame ipFrame;
+    memcpy(ipFrame.TIPA, ip.getbuf(), sizeof(ipFrame.TIPA));
+    memcpy(ipFrame.Data, &icmp, sizeof(icmp_frame));
+
+    frame_queue.send(ICMP,&ipFrame,sizeof(ip_frame));
   }
 
   return 0;

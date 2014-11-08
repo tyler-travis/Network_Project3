@@ -35,6 +35,16 @@ void * IP::getbuf()
   return a_ip;
 }
 
+unsigned int IP::getint()
+{
+  unsigned int ret = 0;
+  for(int i = 0; i < 4; ++i)
+  {
+    ret |= a_ip[i] << (8*(3-i));
+  }
+  return ret;
+}
+
 void IP::print_x()
 {
   printf("0x%02x%02x%02x%02x\n", a_ip[0], a_ip[1], a_ip[2], a_ip[3]);

@@ -16,6 +16,7 @@ class IP
     void set_IP(unsigned int);
     void set_IP(unsigned char, unsigned char, unsigned char, unsigned char);
     void set_IP(char*);
+    unsigned int getint();
 };
 
 #endif
