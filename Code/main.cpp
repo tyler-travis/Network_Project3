@@ -56,7 +56,7 @@ struct icmp_frame
   octet Code;           // offset 1 - Echo Request = 0; Echo Reply = 0
   octet Checksum[2];    // offset 2
   octet Header_Data[4]; // offset 4 - Data
-  octet Data[48];       // offset 8
+  octet Data[66];       // offset 8
 };
 
 struct ip_header
@@ -140,7 +140,7 @@ void *ip_protocol_loop(void *arg)
 
       if (event != TIMER && buf.Protocol == 0x1)
       {
-        icmp_queue.send(PACKET, buf.Data, sizeof(icmp_frame));
+        icmp_queue.send(PACKET, &buf, sizeof(ip_frame));
         continue;
       }
       
@@ -165,23 +165,79 @@ void *ip_protocol_loop(void *arg)
 void *icmp_protocol_loop(void *arg)
 {
   icmp_frame buf;
+  ip_frame ipFrame_recv;
   event_kind event;
   unsigned int seq_num = 0;
   const int id_num = 1234;
 
   while (1)
   {
-    icmp_queue.recv(&event, &buf, sizeof(icmp_frame));
+    icmp_queue.recv(&event, &ipFrame_recv, sizeof(ip_frame));
     if(event == PACKET || event == ICMP)
     {
       printf("Recieved ICMP Packet!\n");
+
+      memcpy(&buf, ipFrame_recv.Data, sizeof(icmp_frame));
+
       if(buf.Type == 0)
       {
         // Echo Reply
       }
-      else if(buf.Type == 8)
+      else if(buf.Type == 8 && event == PACKET)
       {
-        // Echo Request
+        // Recieve Request
+        // Send Echo Reply
+        
+        icmp_frame temp = buf;
+        temp.Checksum[0] = 0;
+        temp.Checksum[1] = 0;
+        int check = chksum((octet *)(&temp), sizeof(icmp_frame), 0);
+        
+        if (check != (buf.Checksum[0]<<8 | buf.Checksum[1]))
+        {
+          continue;
+        }
+
+        icmp_frame icmpFrame;
+        // Echo Reply
+        
+        icmpFrame.Type = 0;
+        icmpFrame.Header_Data[0] = buf.Header_Data[0];
+        icmpFrame.Header_Data[1] = buf.Header_Data[1];
+
+        // Set seq
+        icmpFrame.Header_Data[2] = buf.Header_Data[2];
+        icmpFrame.Header_Data[3] = buf.Header_Data[3];
+
+        memcpy(icmpFrame.Data, buf.Data, sizeof(icmpFrame.Data));
+
+        // Set Checksum
+        check = chksum((octet *)(&icmpFrame), sizeof(icmp_frame), 0);
+        icmpFrame.Checksum[0] = 0xff & (check >> 8);
+        icmpFrame.Checksum[1] = 0xff & check;
+
+        IP TIP(ipFrame_recv.SIPA[0], ipFrame_recv.SIPA[1], ipFrame_recv.SIPA[2], ipFrame_recv.SIPA[3]);
+
+        ip_frame ipFrame = create_IP(myIP, TIP); 
+
+        ether_header etherHeader;
+        memcpy(etherHeader.src_mac, mac, sizeof(etherHeader.src_mac));
+        memcpy(etherHeader.dst_mac, cache.get_MAC(TIP).getbuf(), sizeof(etherHeader.dst_mac));
+
+        etherHeader.prot[0] = 0x08;
+        etherHeader.prot[1] = 0x00;
+
+        octet send_buf[sizeof(etherHeader)+sizeof(ip_frame)];
+        memcpy(send_buf, &etherHeader, sizeof(ether_header));
+        memcpy(send_buf+sizeof(ether_header), &ipFrame, sizeof(ip_frame));
+
+        net.send_frame(send_buf, 98);
+        printf("Sent Reply\n");
+      }
+      else if(buf.Type == 8 && event == ICMP)
+      {
+        // Send Request
+        // Create Echo Request
         
         // Set id
         buf.Header_Data[0] = 0xff & (id_num >> 8);
@@ -197,8 +253,7 @@ void *icmp_protocol_loop(void *arg)
         buf.Checksum[1] = 0xff & check;
 
         // Recieve the IP address from the data field of the ICMP packet
-        IP TIP;
-        memcpy(TIP.getbuf(), buf.Data, 4);
+        IP TIP(ipFrame_recv.SIPA[0], ipFrame_recv.SIPA[1], ipFrame_recv.SIPA[2], ipFrame_recv.SIPA[3]);
 
         // Create the IP header
         ip_frame ipFrame = create_IP(myIP, TIP);
@@ -224,7 +279,7 @@ void *icmp_protocol_loop(void *arg)
         memcpy(send_buf, &etherHeader, sizeof(ether_header));
         memcpy(send_buf+sizeof(ether_header), &ipFrame, sizeof(ip_frame));
 
-        net.send_frame(send_buf, sizeof(send_buf)-4);
+        net.send_frame(send_buf, 98);
       }
     }
 
@@ -338,6 +393,28 @@ void *arp_protocol_loop(void *arg)
         printf("Sending Reply\n");
         
         net.send_frame(send_buf, sizeof(send_buf));
+
+        MAC SHA(buf[8], buf[9], buf[10], buf[11], buf[12], buf[13]);
+        IP SPA(buf[14],buf[15],buf[16],buf[17]);
+
+        if(!cache.find_IP_b(SPA))
+        {
+          printf("Not in cache\n");
+
+          if(cache.insert_IP_MAC(SPA,SHA))
+          {
+            printf("Inserted IP+MAC in cache\n");
+          }
+        }
+        if(cache.find_IP_b(SPA)) // Added the _b to defierentiate between the two 
+        {
+          printf("\tIP+MAC is in cache\n");
+        }
+        else
+        {
+          printf("\tIP+MAC is not in cache\n");
+        }
+
       }
       else if(memcmp(buf+8,mac,6) && buf[7] == 2 && !memcmp(buf+24,myIP.getbuf(),4))
       {
@@ -378,11 +455,11 @@ void *arp_protocol_loop(void *arg)
         // 
 
         event_kind event1;
-        icmp_frame icmp;
+        ip_frame ipFrame;
         
         // Pull off the frame to send and send it to the next layer
-        frame_queue.recv(&event1, &icmp, sizeof(icmp_frame));
-        icmp_queue.send(event1, &icmp, sizeof(icmp_frame));
+        frame_queue.recv(&event1, &ipFrame, sizeof(ip_frame));
+        icmp_queue.send(event1, &ipFrame, sizeof(ip_frame));
 
         //memcpy(ipFrame.Data, &icmp, sizeof(icmp_frame));
 
@@ -427,10 +504,12 @@ void *ping(void *args)
     icmp.Header_Data[2] = 0;
     icmp.Header_Data[3] = 0;
 
+    ip_frame ipFrame;
+    memcpy(ipFrame.TIPA, ip.getbuf(), sizeof(ipFrame.TIPA));
     
+    memcpy(ipFrame.Data, &icmp, sizeof(icmp_frame));
     // Send the ICMP frame up to the reply layer
-    memcpy(icmp.Data, ip.getbuf(), sizeof(6));    // Only way to get TIP up the stack... we think....
-    icmp_queue.send(ICMP, &icmp, sizeof(icmp_frame));
+    icmp_queue.send(ICMP, &ipFrame, sizeof(ip_frame));
 
   }
   else
