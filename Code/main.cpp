@@ -201,7 +201,7 @@ void *icmp_protocol_loop(void *arg)
         memcpy(TIP.getbuf(), buf.Data, 4);
 
         // Create the IP header
-        ip_frame ipFrame = create_IP(&buf, myIP, TIP);
+        ip_frame ipFrame = create_IP(myIP, TIP);
 
         seq_num++;
 
@@ -337,7 +337,7 @@ void *arp_protocol_loop(void *arg)
         SPA.print_d();
 
         // Put the MAC and IP Address into the ARP Cache
-        if(!cache.find_IP_(SPA))
+        if(!cache.find_IP_b(SPA))
         {
           printf("Not in cache\n");
 
@@ -389,7 +389,7 @@ void *ping(void *args)
   // Get the IP address from the argument
   IP ip = *(static_cast<IP*>(args));
   octet packet[1500];
-  if(cache.find_IP_(ip))
+  if(cache.find_IP_b(ip))
   {
     printf("IP+MAC is in cache\n");
     cache_type::iterator itr = cache.find_IP(ip);
