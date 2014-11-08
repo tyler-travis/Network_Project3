@@ -208,6 +208,8 @@ void *icmp_protocol_loop(void *arg)
         ether_header etherHeader;
         memcpy(etherHeader.src_mac, mac, sizeof(etherHeader.src_mac));
         memcpy(etherHeader.dst_mac, cache.get_MAC(TIP).getbuf(), sizeof(etherHeader.dst_mac));
+        etherHeader.prot[0] = 0x08;
+        etherHeader.prot[1] = 0x00;
       }
     }
 
